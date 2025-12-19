@@ -1,0 +1,34 @@
+[project]
+name = "reopt-mcp"
+version = "0.2.0"
+description = "MCP server for NREL's REopt API"
+authors = ["Your Name <your.email@example.com>"]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "win-64"]
+
+[dependencies]
+python = ">=3.10"
+mcp = ">=1.0.0"
+httpx = ">=0.27.0"
+pydantic = ">=2.0.0"
+python-dotenv = ">=1.0.0"
+
+[tasks]
+# Run the MCP server
+server = "python -m reopt_mcp"
+
+# Run tests
+test = { cmd = "python tests/test_mcp.py", env = { PYTHONPATH = "." } }
+simple-test = { cmd = "python tests/simple_test.py", env = { PYTHONPATH = "." } }
+api-test = { cmd = "python tests/test_api_direct.py", env = { PYTHONPATH = "." } }
+
+# Show example scenarios
+examples = "python -m reopt_mcp.examples"
+
+[feature.dev.dependencies]
+pytest = "*"
+black = "*"
+ruff = "*"
+
+[environments]
+dev = ["dev"]

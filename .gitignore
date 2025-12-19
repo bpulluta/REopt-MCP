@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+
+# IDE - keep .vscode/settings.json for MCP configuration
+.idea/
+*.swp
+*.swo
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development documentation (keep only README.md and CHANGELOG.md in root)
+dev-docs/
+
+# Pixi
+.pixi/
+pixi.lock
+uv.lock
+
+# Tests outputs
+tests/__pycache__/
+tests/*.pyc
