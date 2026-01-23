@@ -2,17 +2,20 @@
 Example REopt Scenarios
 
 This module provides various example scenarios for testing the REopt MCP server.
+
+NOTE: Most scenarios now use minimal inputs (only Site, ElectricLoad, ElectricTariff)
+      to let REopt automatically optimize system sizes.
 """
 
 
-def get_simple_pv_scenario():
+def get_base_inputs():
     """
-    A simple scenario evaluating solar PV for a medium office building.
+    Returns just the 3 required inputs - no technologies.
+    Use this as a starting point and add technologies as needed.
     
-    This scenario:
-    - Uses a DOE reference building load profile
-    - Evaluates solar PV up to 1000 kW
-    - Uses a Colorado utility rate
+    CRITICAL: ElectricLoad MUST have BOTH fields:
+    - doe_reference_name: provides hourly load pattern/shape
+    - annual_kwh: scales the pattern to your consumption
     """
     return {
         "Site": {
@@ -21,171 +24,100 @@ def get_simple_pv_scenario():
         },
         "ElectricLoad": {
             "doe_reference_name": "MediumOffice",
-            "annual_kwh": 1000000
+            "annual_kwh": 500000
         },
         "ElectricTariff": {
-            "urdb_label": "5ca4d1175457a39b23b3d45e"
-        },
-        "PV": {
-            "max_kw": 1000
+            "urdb_label": ""
         }
     }
+
+
+def get_solar_scenario():
+    """Evaluate solar PV only - no constraints."""
+    scenario = get_base_inputs()
+    scenario["PV"] = {}
+    return scenario
+
+
+def get_solar_battery_scenario():
+    """Evaluate solar + battery - no constraints."""
+    scenario = get_base_inputs()
+    scenario["PV"] = {}
+    scenario["ElectricStorage"] = {}
+    return scenario
 
 
 def get_pv_and_storage_scenario():
     """
-    A scenario evaluating solar PV with battery storage.
-    
-    This scenario:
-    - Uses a DOE reference building load profile
-    - Evaluates solar PV up to 1000 kW
-    - Evaluates battery storage (500 kW / 1000 kWh)
-    - Uses a Colorado utility rate
+    Solar + battery with constraints (only if you have space/budget limits).
     """
-    return {
-        "Site": {
-            "latitude": 39.7407,
-            "longitude": -104.9890
-        },
-        "ElectricLoad": {
-            "doe_reference_name": "MediumOffice",
-            "annual_kwh": 1000000
-        },
-        "ElectricTariff": {
-            "urdb_label": "5ca4d1175457a39b23b3d45e"
-        },
-        "PV": {
-            "max_kw": 1000
-        },
-        "ElectricStorage": {
-            "max_kw": 500,
-            "max_kwh": 1000
-        }
-    }
-
-
-def get_custom_load_scenario():
-    """
-    A scenario with custom hourly load data.
-    
-    This scenario:
-    - Uses custom hourly electric load data (8760 hours)
-    - Evaluates solar PV
-    - Uses a California utility rate
-    """
-    # Create a simple load profile (flat 100 kW)
-    loads_kw = [100.0] * 8760
-    
-    return {
-        "Site": {
-            "latitude": 37.7749,
-            "longitude": -122.4194
-        },
-        "ElectricLoad": {
-            "loads_kw": loads_kw
-        },
-        "ElectricTariff": {
-            "urdb_label": "5ca4d1175457a39b23b3d45e"  # Example rate
-        },
-        "PV": {
-            "max_kw": 500
-        }
-    }
+    scenario = get_base_inputs()
+    scenario["PV"] = {"max_kw": 500}
+    scenario["ElectricStorage"] = {"max_kw": 250, "max_kwh": 1000}
+    return scenario
 
 
 def get_resilience_scenario():
     """
-    A scenario focused on resilience (backup power).
-    
-    This scenario:
-    - Evaluates backup power capabilities
-    - Includes critical load definition
-    - Evaluates solar PV and battery storage
-    - Specifies outage duration requirements
+    Resilience/backup power scenario with generator.
     """
-    return {
-        "Site": {
-            "latitude": 39.7407,
-            "longitude": -104.9890
-        },
-        "ElectricLoad": {
-            "doe_reference_name": "Hospital",
-            "annual_kwh": 5000000,
-            "critical_load_fraction": 0.5
-        },
-        "ElectricTariff": {
-            "urdb_label": "5ca4d1175457a39b23b3d45e"
-        },
-        "PV": {
-            "max_kw": 2000
-        },
-        "ElectricStorage": {
-            "max_kw": 1000,
-            "max_kwh": 4000
-        },
-        "Financial": {
-            "analysis_years": 25,
-            "value_of_lost_load_per_kwh": 100.0
-        }
+    scenario = get_base_inputs()
+    scenario["ElectricLoad"] = {
+        "doe_reference_name": "Hospital",
+        "annual_kwh": 5000000,
+        "critical_load_fraction": 0.5
     }
+    scenario["PV"] = {}
+    scenario["ElectricStorage"] = {}
+    scenario["Generator"] = {}
+    scenario["Financial"] = {"value_of_lost_load_per_kwh": 100.0}
+    return scenario
 
 
 def get_wind_scenario():
     """
-    A scenario evaluating wind energy.
-    
-    This scenario:
-    - Evaluates wind turbines
-    - Uses a location with good wind resources
-    - Includes solar PV for comparison
+    Multi-technology: solar + wind + battery.
     """
-    return {
-        "Site": {
-            "latitude": 41.8781,
-            "longitude": -87.6298  # Chicago
-        },
-        "ElectricLoad": {
-            "doe_reference_name": "LargeOffice",
-            "annual_kwh": 10000000
-        },
-        "ElectricTariff": {
-            "urdb_label": "5ca4d1175457a39b23b3d45e"
-        },
-        "Wind": {
-            "max_kw": 2000
-        },
-        "PV": {
-            "max_kw": 1000
-        }
-    }
+    scenario = get_base_inputs()
+    scenario["Site"]["latitude"] = 41.8781
+    scenario["Site"]["longitude"] = -87.6298  # Chicago
+    scenario["PV"] = {}
+    scenario["Wind"] = {}
+    scenario["ElectricStorage"] = {}
+    return scenario
 
 
 def get_all_examples():
     """Return a dictionary of all example scenarios."""
     return {
-        "simple_pv": {
-            "name": "Simple Solar PV",
-            "description": "Basic solar PV evaluation for a medium office",
-            "scenario": get_simple_pv_scenario()
+        "base": {
+            "name": "Base Inputs Only",
+            "description": "Just the 3 required inputs - add technologies as needed",
+            "scenario": get_base_inputs()
+        },
+        "solar": {
+            "name": "Solar Only",
+            "description": "Evaluate solar PV with no constraints",
+            "scenario": get_solar_scenario()
+        },
+        "solar_battery": {
+            "name": "Solar + Battery",
+            "description": "Evaluate solar and battery with no constraints",
+            "scenario": get_solar_battery_scenario()
         },
         "pv_and_storage": {
-            "name": "Solar PV with Battery Storage",
-            "description": "Solar PV and battery storage evaluation",
+            "name": "With Constraints",
+            "description": "Solar + battery with size limits (only if you have actual constraints)",
             "scenario": get_pv_and_storage_scenario()
-        },
-        "custom_load": {
-            "name": "Custom Load Profile",
-            "description": "Scenario with custom hourly load data",
-            "scenario": get_custom_load_scenario()
         },
         "resilience": {
             "name": "Resilience Analysis",
-            "description": "Backup power and resilience evaluation",
+            "description": "Backup power evaluation with generator",
             "scenario": get_resilience_scenario()
         },
         "wind": {
-            "name": "Wind Energy",
-            "description": "Wind turbine evaluation with solar comparison",
+            "name": "Wind + Solar",
+            "description": "Multi-technology evaluation",
             "scenario": get_wind_scenario()
         }
     }
