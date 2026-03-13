@@ -211,8 +211,13 @@ def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
         errors.append("Missing 'ElectricTariff' object")
     else:
         tariff = scenario["ElectricTariff"]
-        if "urdb_label" not in tariff:
-            errors.append("ElectricTariff missing 'urdb_label'")
+        has_urdb = "urdb_label" in tariff
+        has_blended = "blended_annual_energy_rate" in tariff or "blended_annual_rates_us_dollars_per_kwh" in tariff
+        has_monthly = "monthly_energy_rates" in tariff
+        has_tou = "tou_energy_rates_per_kwh" in tariff
+        has_urdb_name = "urdb_utility_name" in tariff and "urdb_rate_name" in tariff
+        if not has_urdb and not has_blended and not has_monthly and not has_tou and not has_urdb_name:
+            errors.append("ElectricTariff missing rate info. Provide 'urdb_label', 'blended_annual_energy_rate', or another valid rate input.")
     
     return (len(errors) == 0, errors)
 
@@ -616,8 +621,8 @@ async def validate_scenario_tool(scenario: dict) -> list[types.TextContent]:
                 guidance.append("🏢 Ask user for building type (office, retail, warehouse, etc.)")
             elif "annual_kwh" in err:
                 guidance.append("⚡ Ask user for annual electricity consumption in kWh")
-            elif "urdb_label" in err:
-                guidance.append("💵 Look up correct URDB label for the user's specific utility/region")
+            elif "urdb_label" in err or "ElectricTariff missing rate" in err:
+                guidance.append("💵 Look up correct URDB label for the user's specific utility/region, or use blended_annual_energy_rate")
         
         return [types.TextContent(
             type="text",
