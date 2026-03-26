@@ -222,7 +222,7 @@ Ask follow-up questions like:
 Verify setup works:
 
 ```bash
-pixi run python tests/simple_test.py
+pixi run simple-test
 ```
 
 ## Development

@@ -69,7 +69,7 @@ def test_server_import():
         print("✓ reopt_mcp.examples can be imported")
         
         # Test getting an example
-        example = examples.get_simple_pv_scenario()
+        example = examples.get_solar_scenario()
         
         # Verify structure
         if "ElectricLoad" in example:
