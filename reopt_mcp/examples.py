@@ -12,23 +12,18 @@ def get_base_inputs():
     """
     Returns just the 3 required inputs - no technologies.
     Use this as a starting point and add technologies as needed.
-    
+
     CRITICAL: ElectricLoad MUST have BOTH fields:
     - doe_reference_name: provides hourly load pattern/shape
     - annual_kwh: scales the pattern to your consumption
     """
     return {
-        "Site": {
-            "latitude": 39.7407,
-            "longitude": -104.9890
-        },
-        "ElectricLoad": {
-            "doe_reference_name": "MediumOffice",
-            "annual_kwh": 500000
-        },
+        "Site": {"latitude": 39.7407, "longitude": -104.9890},
+        "ElectricLoad": {"doe_reference_name": "MediumOffice", "annual_kwh": 500000},
         "ElectricTariff": {
-            "urdb_label": ""
-        }
+            "blended_annual_energy_rate": 0.12,
+            "blended_annual_demand_rate": 15.0,
+        },
     }
 
 
@@ -65,7 +60,7 @@ def get_resilience_scenario():
     scenario["ElectricLoad"] = {
         "doe_reference_name": "Hospital",
         "annual_kwh": 5000000,
-        "critical_load_fraction": 0.5
+        "critical_load_fraction": 0.5,
     }
     scenario["PV"] = {}
     scenario["ElectricStorage"] = {}
@@ -93,48 +88,48 @@ def get_all_examples():
         "base": {
             "name": "Base Inputs Only",
             "description": "Just the 3 required inputs - add technologies as needed",
-            "scenario": get_base_inputs()
+            "scenario": get_base_inputs(),
         },
         "solar": {
             "name": "Solar Only",
             "description": "Evaluate solar PV with no constraints",
-            "scenario": get_solar_scenario()
+            "scenario": get_solar_scenario(),
         },
         "solar_battery": {
             "name": "Solar + Battery",
             "description": "Evaluate solar and battery with no constraints",
-            "scenario": get_solar_battery_scenario()
+            "scenario": get_solar_battery_scenario(),
         },
         "pv_and_storage": {
             "name": "With Constraints",
             "description": "Solar + battery with size limits (only if you have actual constraints)",
-            "scenario": get_pv_and_storage_scenario()
+            "scenario": get_pv_and_storage_scenario(),
         },
         "resilience": {
             "name": "Resilience Analysis",
             "description": "Backup power evaluation with generator",
-            "scenario": get_resilience_scenario()
+            "scenario": get_resilience_scenario(),
         },
         "wind": {
             "name": "Wind + Solar",
             "description": "Multi-technology evaluation",
-            "scenario": get_wind_scenario()
-        }
+            "scenario": get_wind_scenario(),
+        },
     }
 
 
 if __name__ == "__main__":
     """Print all example scenarios."""
     import json
-    
+
     examples = get_all_examples()
-    
+
     print("Available Example Scenarios")
     print("=" * 60)
-    
+
     for key, example in examples.items():
         print(f"\n{example['name']} ({key})")
         print(f"Description: {example['description']}")
         print("\nScenario JSON:")
-        print(json.dumps(example['scenario'], indent=2))
+        print(json.dumps(example["scenario"], indent=2))
         print("\n" + "-" * 60)

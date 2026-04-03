@@ -64,6 +64,8 @@ pixi install
 
 Open Copilot Chat → Click ⚙️ → Confirm `reopt-dev` has checkmark ✓
 
+For detailed non-technical setup steps, see `docs/REopt_MCP_Setup_Guide.md`.
+
 ## How to Use
 
 **The MCP is an information gatherer FIRST, optimizer second.**
@@ -85,10 +87,8 @@ It will NEVER jump straight to running optimizations. Instead, it asks questions
 You: "I want to analyze solar for my building in Denver"
 
 MCP: "Great! To set up your solar analysis, I need:
-      1. Your annual energy consumption in kWh, OR
-      2. Your building type (office, retail, hospital, etc.)
-      
-      Which would you like to provide?"
+  1. Your building type (office, retail, hospital, etc.)
+  2. Your annual energy consumption in kWh"
 
 You: "It's a medium office, about 500,000 kWh per year"
 
@@ -103,12 +103,11 @@ MCP: [Builds scenario with Denver location, 500k kWh, solar only]
 You: "Evaluate solar and batteries for my retail store in Austin"
 
 MCP: "Got it - solar and batteries for Austin. Do you have your 
-      annual energy consumption in kWh, or should I use the DOE 
-      reference profile for a typical retail store?"
+  building type and annual energy consumption in kWh?"
 
-You: "Use the DOE retail profile"
+You: "Retail store, 800,000 kWh/year"
 
-MCP: [Builds scenario: Austin location, DOE RetailStore profile, solar + battery]
+MCP: [Builds scenario: Austin location, RetailStore, 800k kWh, solar + battery]
      [Runs optimization, presents results]
      
      "Results show solar + battery is economically viable for Austin retail...
@@ -123,7 +122,8 @@ You: "Should I get solar?"
 
 MCP: "I'd be happy to help analyze solar for your building! To get started, I need:
       1. Location: Where is your building? (city/state or address)
-      2. Energy use: Annual consumption in kWh OR building type (office, retail, etc.)
+  2. Building type (office, retail, etc.)
+  3. Annual consumption in kWh
       
       What can you tell me about your building?"
 
@@ -150,14 +150,50 @@ The MCP will help you provide:
    - MCP can convert "Denver" to coordinates
    - More precise = better results
 
-2. **Energy Consumption** - Either:
-   - Annual kWh (e.g., "500,000 kWh/year")
-   - Building type (e.g., "medium office", "retail store", "hospital")
+2. **Electric Load** - BOTH required:
+  - `doe_reference_name` (e.g., `MediumOffice`, `RetailStore`, `Hospital`)
+  - `annual_kwh` (e.g., `500000`)
 
 3. **Utility Rate** - MCP will:
-   - Use appropriate rate for your region
-   - Help you find your specific utility's rate if needed
-   - Explain rate options
+  - Collect blended annual energy ($/kWh) and demand ($/kW) rates
+  - Use these directly in `ElectricTariff` for current workflow
+
+### REopt Core Input Cheat Sheet
+
+Use this as a quick reference for **valid REopt.jl-style keys** in common scenarios.
+
+```json
+{
+  "Settings": {
+    "off_grid_flag": false
+  },
+  "Site": {
+    "latitude": 39.7407,
+    "longitude": -104.9890
+  },
+  "ElectricLoad": {
+    "doe_reference_name": "MediumOffice",
+    "annual_kwh": 500000
+  },
+  "ElectricTariff": {
+    "blended_annual_energy_rate": 0.12,
+    "blended_annual_demand_rate": 15.0
+  },
+  "PV": {},
+  "ElectricStorage": {}
+}
+```
+
+**Key rules:**
+- **On-grid (default):** `ElectricTariff` is required
+- **Off-grid:** set `"Settings": {"off_grid_flag": true}` and do **not** include `ElectricTariff`
+- **ElectricLoad:** always provide both `doe_reference_name` and `annual_kwh` for MCP-guided flows
+- **Tariff input (current workflow):** use `blended_annual_energy_rate` + `blended_annual_demand_rate`
+- **Solar/Battery:** add only what you requested (`"PV": {}`, `"ElectricStorage": {}`)
+
+**Avoid these invalid alias keys:**
+- `blended_annual_rates_us_dollars_per_kwh`
+- `blended_annual_demand_charges_us_dollars_per_kw`
 
 ### Technologies You Can Evaluate
 
@@ -170,6 +206,18 @@ Tell the MCP what you want to evaluate:
 - **Multiple** - "solar and batteries", "all renewable options"
 
 The MCP adds empty technology objects like `"PV": {}` based on what you ask for - letting REopt optimize sizing unless you specify constraints.
+
+## Tool Map
+
+Core MCP tools exposed by this server:
+
+- `submitAndWait` - Validate, submit, poll, and return optimization results
+- `validateScenario` - Check scenario completeness and return missing-info guidance
+- `getResultsSummary` - Concise recommendation + economics summary
+- `getFinancialSummary` - Detailed financial metrics table
+- `getSystemSummary` - Technical system sizing/performance summary
+- `getMinimalScenario` - Canonical minimal scenario structure
+- `getExampleScenario` - Canonical working examples
 
 ## What Makes This Different
 
@@ -222,7 +270,7 @@ Ask follow-up questions like:
 Verify setup works:
 
 ```bash
-pixi run python tests/simple_test.py
+pixi run test
 ```
 
 ## Development
@@ -231,6 +279,13 @@ Run the MCP server directly:
 
 ```bash
 pixi run server
+```
+
+Run quality checks:
+
+```bash
+pixi run lint
+pixi run format-check
 ```
 
 Test with example scenarios:
@@ -252,11 +307,21 @@ solar_battery = get_solar_battery_scenario()
 
 ```
 reopt_mcp/
-  server.py          # Main MCP server with conversational instructions
-  examples.py        # Helper functions for building scenarios
+  server.py          # Thin bootstrap entry point
+  tools.py           # MCP tool registration and dispatch
+  client.py          # REopt API submit/poll/fetch logic
+  validation.py      # Scenario validation and guidance
+  summaries.py       # Results formatting helpers
+  instructions.py    # Canonical MCP instructions
+  config.py          # Runtime environment config
+  constants.py       # Shared constants
+  examples.py        # Canonical scenario examples
 tests/
-  simple_test.py     # Basic API test
-  test_mcp.py        # MCP functionality tests
+  test_validation.py   # Contract validation rules
+  test_examples.py     # Bundled example scenario validity
+  test_summaries.py    # Markdown summary formatting
+  test_client.py       # Mocked API client behavior
+  test_integration_api.py  # Optional external API smoke (opt-in)
 ```
 
 ## Resources
