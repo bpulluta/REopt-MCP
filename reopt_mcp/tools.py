@@ -46,6 +46,7 @@ def _invalid_request(message: str, next_step: str) -> list[types.TextContent]:
             text=json.dumps(
                 {
                     "status": "invalid_request",
+                    "submission_status": "not_submitted",
                     "error": message,
                     "next_step": next_step,
                 },
@@ -85,7 +86,7 @@ async def list_tools() -> list[types.Tool]:
                 "properties": {
                     "scenario": {
                         "type": "object",
-                        "description": "REopt scenario with Site, ElectricLoad, ElectricTariff (required) plus technology objects based on user intent (PV, ElectricStorage, etc.)",
+                        "description": "REopt scenario with Site, ElectricLoad, ElectricTariff plus technology objects based on user intent (PV, ElectricStorage, etc.). If omitted, tool returns guidance and does not submit.",
                     },
                     "max_wait_seconds": {
                         "type": "integer",
@@ -93,7 +94,6 @@ async def list_tools() -> list[types.Tool]:
                         "default": 300,
                     },
                 },
-                "required": ["scenario"],
             },
             annotations=MUTATING_TOOL_HINTS,
         ),
@@ -215,7 +215,7 @@ async def call_tool(name: str, arguments: Any) -> list[types.TextContent]:
         if not isinstance(scenario, dict):
             return _invalid_request(
                 "'scenario' is required and must be an object.",
-                "Provide a complete scenario object with Site, ElectricLoad, ElectricTariff, and requested technologies.",
+                "Call getMinimalScenario for a template, gather missing user inputs, then call submitAndWait with a complete scenario.",
             )
         if not isinstance(max_wait_seconds, int) or max_wait_seconds <= 0:
             return _invalid_request(
@@ -345,6 +345,22 @@ async def submit_and_wait(
             ]
 
         run_uuid = await submit_job(scenario)
+        if not _is_nonempty_string(run_uuid):
+            return [
+                types.TextContent(
+                    type="text",
+                    text=json.dumps(
+                        {
+                            "status": "error",
+                            "submission_status": "not_submitted",
+                            "error": "REopt API did not return a valid run_uuid.",
+                            "next_step": "Retry submitAndWait. If this persists, inspect API response/auth configuration.",
+                        },
+                        indent=2,
+                    ),
+                )
+            ]
+
         poll_result = await poll_until_complete(run_uuid, max_wait_seconds)
 
         if poll_result["status"] == "complete":
@@ -361,6 +377,7 @@ async def submit_and_wait(
                     text=json.dumps(
                         {
                             "status": "success",
+                            "submission_status": "submitted",
                             "run_uuid": run_uuid,
                             "elapsed_seconds": poll_result["elapsed_seconds"],
                             "summary": summary,

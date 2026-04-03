@@ -39,7 +39,15 @@ def test_submit_and_wait_requires_scenario_object() -> None:
 
     payload = json.loads(result[0].text)
     assert payload["status"] == "invalid_request"
+    assert payload["submission_status"] == "not_submitted"
     assert "scenario" in payload["error"]
+
+
+def test_submit_and_wait_schema_allows_missing_scenario_for_graceful_guidance() -> None:
+    listed_tools = asyncio.run(tools.list_tools())
+    submit_tool = next(t for t in listed_tools if t.name == "submitAndWait")
+
+    assert "required" not in submit_tool.inputSchema
 
 
 def test_submit_and_wait_rejects_invalid_max_wait_seconds() -> None:
@@ -66,3 +74,34 @@ def test_submit_and_wait_rejects_invalid_max_wait_seconds() -> None:
     payload = json.loads(result[0].text)
     assert payload["status"] == "invalid_request"
     assert "max_wait_seconds" in payload["error"]
+
+
+def test_submit_and_wait_handles_missing_run_uuid(monkeypatch) -> None:
+    async def fake_submit_job(_scenario):
+        return None
+
+    monkeypatch.setattr(tools, "submit_job", fake_submit_job)
+
+    result = asyncio.run(
+        tools.call_tool(
+            "submitAndWait",
+            {
+                "scenario": {
+                    "Site": {"latitude": 39.7407, "longitude": -104.9890},
+                    "ElectricLoad": {
+                        "doe_reference_name": "MediumOffice",
+                        "annual_kwh": 500000,
+                    },
+                    "ElectricTariff": {
+                        "blended_annual_energy_rate": 0.12,
+                        "blended_annual_demand_rate": 15.0,
+                    },
+                }
+            },
+        )
+    )
+
+    payload = json.loads(result[0].text)
+    assert payload["status"] == "error"
+    assert payload["submission_status"] == "not_submitted"
+    assert "run_uuid" in payload["error"]
