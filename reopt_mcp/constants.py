@@ -1,5 +1,13 @@
 """Shared constants for REopt MCP."""
 
+# Technologies the server validates and summarizes. Only these keys may be added
+# to a scenario as generation/storage options; each must be a JSON object ({}).
+KNOWN_TECHNOLOGIES = {"PV", "Wind", "ElectricStorage", "Generator"}
+
+# Valid geographic coordinate bounds (WGS84 degrees).
+LATITUDE_RANGE = (-90.0, 90.0)
+LONGITUDE_RANGE = (-180.0, 180.0)
+
 VALID_DOE_REFERENCE_NAMES = {
     "FastFoodRest",
     "FullServiceRest",

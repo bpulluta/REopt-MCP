@@ -1,0 +1,26 @@
+{
+  "status": "optimal",
+  "outputs": {
+    "Wind": {
+      "size_kw": 300,
+      "annual_energy_produced_kwh": 850000,
+      "annual_om_cost_before_tax": 9000
+    },
+    "Generator": {
+      "size_kw": 125,
+      "annual_fuel_consumption_gal": 1500,
+      "annual_om_cost_before_tax": 800
+    },
+    "Financial": {
+      "npv": 145000,
+      "lcc": 980000,
+      "simple_payback_years": 6.2,
+      "internal_rate_of_return": 0.14
+    },
+    "ElectricUtility": {
+      "year_one_bill_before_tax_bau": 210000,
+      "year_one_bill_before_tax": 130000
+    }
+  },
+  "messages": {}
+}

@@ -1,0 +1,15 @@
+{
+  "site_name": "reopt",
+  "start_url": "https://natlabrockies.github.io/REopt.jl/dev/",
+  "allow_prefix": "https://natlabrockies.github.io/REopt.jl/dev/",
+  "pages_crawled": 14,
+  "chunks_written": 134,
+  "max_pages": 200,
+  "max_depth": 8,
+  "generated_at_epoch": 1773943653,
+  "outputs": {
+    "pages_dir": "pages",
+    "pages_jsonl": "pages.jsonl",
+    "chunks_jsonl": "chunks.jsonl"
+  }
+}

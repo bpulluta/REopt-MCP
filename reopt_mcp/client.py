@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from reopt_mcp.config import NREL_API_KEY, REOPT_API_BASE_URL
+from reopt_mcp.config import NLR_API_KEY, REOPT_API_BASE_URL
 
 
 def truncate_large_arrays(data: Any) -> Any:
@@ -30,22 +30,36 @@ def truncate_large_arrays(data: Any) -> Any:
 
 
 async def submit_job(scenario: dict) -> str:
+    """POST a scenario to the REopt API and return the run UUID."""
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            f"{REOPT_API_BASE_URL}/job",
-            json=scenario,
-            params={"api_key": NREL_API_KEY},
-        )
+        try:
+            response = await client.post(
+                f"{REOPT_API_BASE_URL}/job",
+                json=scenario,
+                params={"api_key": NLR_API_KEY},
+            )
+        except httpx.ConnectError as exc:
+            raise RuntimeError(
+                f"Cannot reach REopt API at {REOPT_API_BASE_URL}. "
+                f"Check REOPT_API_BASE_URL and network access. ({exc})"
+            ) from exc
         response.raise_for_status()
         return response.json().get("run_uuid")
 
 
 async def get_job_data(run_uuid: str) -> dict:
+    """GET full results for a completed REopt run."""
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.get(
-            f"{REOPT_API_BASE_URL}/job/{run_uuid}/results",
-            params={"api_key": NREL_API_KEY},
-        )
+        try:
+            response = await client.get(
+                f"{REOPT_API_BASE_URL}/job/{run_uuid}/results",
+                params={"api_key": NLR_API_KEY},
+            )
+        except httpx.ConnectError as exc:
+            raise RuntimeError(
+                f"Cannot reach REopt API at {REOPT_API_BASE_URL}. "
+                f"Check REOPT_API_BASE_URL and network access. ({exc})"
+            ) from exc
         response.raise_for_status()
         return response.json()
 

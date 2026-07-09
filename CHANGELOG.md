@@ -5,6 +5,24 @@ All notable changes to the REopt MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-09
+
+### Changed
+- **Configuration**: Simplified `config.py` — single `NLR_API_KEY` env var, single
+  `REOPT_API_BASE_URL` default (`developer.nlr.gov`). Removed all legacy fallback
+  and hostname normalization logic.
+- **Client**: Cleaner connection error messages that include the active base URL.
+- **Version**: Bumped to 0.4.0 across `pyproject.toml`, `pixi.toml`, and server init.
+- **Pixi**: Replaced deprecated `[project]` with `[workspace]` in `pixi.toml`.
+- **README**: Rewritten for production use — concise setup, usage, and development
+  sections with no redundancy.
+
+### Removed
+- Legacy `NREL_API_KEY` env var fallback and `developer.nrel.gov` hostname rewriting.
+- `docs/` directory (archived to `archive/docs/`).
+- 20+ development-only markdown files from `dev-docs/` (archived to `archive/dev-docs/`).
+  Only the REopt.jl reference docs (`dev-docs/reoptjl_docs/`) are retained.
+
 ## [0.3.0] - 2026-03-09
 
 ### Changed
@@ -23,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Canonical examples and helper outputs updated to match validator behavior
 - **Testing**: Replaced script-style tests with deterministic pytest suite:
   - Added focused unit tests for validation, examples, summaries, and mocked client behavior
-  - Added optional integration test path guarded by `NREL_API_KEY` + `RUN_INTEGRATION_TESTS=1`
+  - Added optional integration test path guarded by `NLR_API_KEY` + `RUN_INTEGRATION_TESTS=1`
 - **Tooling/Tasks**:
   - Updated pixi tasks to `pytest` workflow
   - Added `lint`, `format`, and `format-check` tasks using Ruff

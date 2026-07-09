@@ -11,8 +11,8 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.skipif(
-    not os.getenv("NREL_API_KEY") or os.getenv("RUN_INTEGRATION_TESTS", "0") != "1",
-    reason="Set NREL_API_KEY and RUN_INTEGRATION_TESTS=1 to run integration tests.",
+    not os.getenv("NLR_API_KEY") or os.getenv("RUN_INTEGRATION_TESTS", "0") != "1",
+    reason="Set NLR_API_KEY and RUN_INTEGRATION_TESTS=1 to run integration tests.",
 )
 def test_submit_and_fetch_job_results() -> None:
     scenario = get_solar_scenario()

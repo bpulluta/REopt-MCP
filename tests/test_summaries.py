@@ -39,6 +39,41 @@ def test_format_results_summary_includes_key_sections() -> None:
     assert "Annual Savings" in text
 
 
+def test_summaries_include_wind_and_generator() -> None:
+    outputs = {
+        "Wind": {
+            "size_kw": 300,
+            "annual_energy_produced_kwh": 850000,
+            "annual_om_cost_before_tax": 9000,
+        },
+        "Generator": {
+            "size_kw": 125,
+            "annual_fuel_consumption_gal": 1500,
+            "annual_om_cost_before_tax": 800,
+        },
+        "Financial": {"npv": 145000},
+    }
+
+    results = format_results_summary(outputs)
+    assert "Wind" in results
+    assert "Backup Generator" in results
+
+    system = format_system_summary(outputs)
+    assert "Wind System" in system
+    assert "Backup Generator" in system
+    assert "Fuel Use" in system
+
+    submit = build_submit_summary("run-w", 30, "optimal", outputs)
+    assert "Wind: 300.0 kW" in submit
+    assert "Generator: 125.0 kW" in submit
+
+
+def test_build_submit_summary_tolerates_missing_npv() -> None:
+    text = build_submit_summary("run-x", 10, "optimal", {"Financial": {}})
+    assert "Run UUID: run-x" in text
+    assert "NPV" not in text
+
+
 def test_format_financial_summary_handles_missing_financial() -> None:
     assert format_financial_summary({}) == "No financial results available."
 

@@ -3,9 +3,32 @@
 from reopt_mcp.constants import (
     INVALID_ELECTRIC_TARIFF_ALIASES,
     INVALID_SITE_FIELDS,
+    KNOWN_TECHNOLOGIES,
+    LATITUDE_RANGE,
+    LONGITUDE_RANGE,
     VALID_DOE_REFERENCE_NAMES,
     VALID_ELECTRIC_TARIFF_KEYS,
 )
+
+
+def _is_number(value) -> bool:
+    """True for real numbers, excluding bool (a subclass of int)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _validate_coordinate(
+    site: dict, field: str, bounds: tuple[float, float], errors: list[str]
+) -> None:
+    if field not in site:
+        errors.append(f"Site missing '{field}'")
+        return
+    value = site[field]
+    if not _is_number(value):
+        errors.append(f"Site '{field}' must be a number")
+        return
+    low, high = bounds
+    if not low <= value <= high:
+        errors.append(f"Site '{field}' must be between {low} and {high} (got {value})")
 
 
 def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
@@ -28,6 +51,8 @@ def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
 
     if "Site" not in scenario:
         errors.append("Missing 'Site' object")
+    elif not isinstance(scenario["Site"], dict):
+        errors.append("Site must be an object")
     else:
         site = scenario["Site"]
         invalid_fields = set(site.keys()) & INVALID_SITE_FIELDS
@@ -35,10 +60,8 @@ def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
             errors.append(
                 f"Site contains invalid fields: {invalid_fields}. Only use latitude/longitude."
             )
-        if "latitude" not in site:
-            errors.append("Site missing 'latitude'")
-        if "longitude" not in site:
-            errors.append("Site missing 'longitude'")
+        _validate_coordinate(site, "latitude", LATITUDE_RANGE, errors)
+        _validate_coordinate(site, "longitude", LONGITUDE_RANGE, errors)
 
     if "ElectricLoad" not in scenario:
         errors.append("Missing 'ElectricLoad' object")
@@ -57,10 +80,15 @@ def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
 
         if "annual_kwh" not in load:
             errors.append("ElectricLoad missing 'annual_kwh'")
-        elif (
-            not isinstance(load["annual_kwh"], (int, float)) or load["annual_kwh"] <= 0
-        ):
+        elif not _is_number(load["annual_kwh"]) or load["annual_kwh"] <= 0:
             errors.append("ElectricLoad 'annual_kwh' must be a positive number")
+
+        if "critical_load_fraction" in load:
+            fraction = load["critical_load_fraction"]
+            if not _is_number(fraction) or not 0.0 <= fraction <= 1.0:
+                errors.append(
+                    "ElectricLoad 'critical_load_fraction' must be a number between 0 and 1"
+                )
 
         blended_names = load.get("blended_doe_reference_names")
         blended_percents = load.get("blended_doe_reference_percents")
@@ -142,20 +170,53 @@ def validate_scenario(scenario: dict) -> tuple[bool, list[str]]:
         has_blended_demand = "blended_annual_demand_rate" in tariff
         has_blended = has_blended_energy and has_blended_demand
 
+        for rate_key in ("blended_annual_energy_rate", "blended_annual_demand_rate"):
+            if rate_key in tariff and (
+                not _is_number(tariff[rate_key]) or tariff[rate_key] < 0
+            ):
+                errors.append(
+                    f"ElectricTariff '{rate_key}' must be a non-negative number"
+                )
+
         if not has_urdb and not has_blended:
             errors.append(
                 "ElectricTariff must include either non-empty 'urdb_label' or both 'blended_annual_energy_rate' and 'blended_annual_demand_rate'"
             )
 
+    for tech in sorted(KNOWN_TECHNOLOGIES):
+        if tech in scenario and not isinstance(scenario[tech], dict):
+            errors.append(
+                f"Technology '{tech}' must be an object (use {{}} to let REopt optimize sizing)"
+            )
+
     return (len(errors) == 0, errors)
+
+
+def scenario_warnings(scenario: dict) -> list[str]:
+    """Non-blocking advisories to surface for human review before submission."""
+    warnings: list[str] = []
+    if not isinstance(scenario, dict):
+        return warnings
+
+    requested = [tech for tech in KNOWN_TECHNOLOGIES if tech in scenario]
+    if not requested:
+        warnings.append(
+            "No technology requested (PV, Wind, ElectricStorage, Generator). "
+            "This runs a baseline-only scenario with no recommended systems."
+        )
+    return warnings
 
 
 def guidance_for_errors(errors: list[str]) -> list[str]:
     guidance: list[str] = []
     for err in errors:
-        if "latitude" in err or "longitude" in err:
+        if "must be an object" in err and "Technology" in err:
             guidance.append(
-                "📍 Ask user for the city/address, then look up coordinates"
+                '🔧 Add technologies as empty objects, e.g. "PV": {} — never a string or list'
+            )
+        elif "latitude" in err or "longitude" in err:
+            guidance.append(
+                "📍 Ask user for the city/address, then look up valid coordinates (lat -90..90, lon -180..180)"
             )
         elif "doe_reference_name" in err:
             guidance.append(

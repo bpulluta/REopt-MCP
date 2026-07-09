@@ -31,9 +31,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Development documentation (keep only README.md and CHANGELOG.md in root)
-dev-docs/
-
 # Pixi
 .pixi/
 pixi.lock
@@ -43,4 +40,6 @@ uv.lock
 tests/__pycache__/
 tests/*.pyc
 
+# Archived development docs and notebooks
+archive/
 .github/

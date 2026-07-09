@@ -1,0 +1,44 @@
+{
+  "label_scheme": "domain",
+  "topics": {
+    "developer": {
+      "chunk_count": 31,
+      "url_count": 5,
+      "bundle_file": "bundles/developer.md"
+    },
+    "examples": {
+      "chunk_count": 5,
+      "url_count": 2,
+      "bundle_file": "bundles/examples.md"
+    },
+    "inputs": {
+      "chunk_count": 40,
+      "url_count": 2,
+      "bundle_file": "bundles/inputs.md"
+    },
+    "installation": {
+      "chunk_count": 2,
+      "url_count": 1,
+      "bundle_file": "bundles/installation.md"
+    },
+    "methods": {
+      "chunk_count": 6,
+      "url_count": 2,
+      "bundle_file": "bundles/methods.md"
+    },
+    "outputs": {
+      "chunk_count": 22,
+      "url_count": 2,
+      "bundle_file": "bundles/outputs.md"
+    },
+    "tech-models": {
+      "chunk_count": 2,
+      "url_count": 1,
+      "bundle_file": "bundles/tech-models.md"
+    }
+  },
+  "outputs": {
+    "bundles_dir": "bundles",
+    "bundles_jsonl": "bundles.jsonl"
+  }
+}

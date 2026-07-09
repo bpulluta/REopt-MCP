@@ -1,7 +1,7 @@
 """
 REopt MCP Server - Main Entry Point
 
-This module provides an MCP server for interacting with NREL's REopt API.
+This module provides an MCP server for interacting with NLR's REopt API.
 """
 
 from .server import main
