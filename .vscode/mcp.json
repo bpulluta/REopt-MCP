@@ -1,0 +1,16 @@
+{
+	"servers": {
+		"reopt": {
+			"type": "stdio",
+			"command": "npx",
+			"args": [
+				"tsx",
+				"src/index.ts"
+			],
+			"cwd": "/Users/bpulluta/REopt-MCP",
+			"env": {
+				"NLR_API_KEY": "${env:NLR_API_KEY}"
+			}
+		}
+	}
+}

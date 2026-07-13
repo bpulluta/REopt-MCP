@@ -4,10 +4,11 @@ MCP server for optimizing distributed energy resources using NLR's REopt API. Wo
 
 ## Setup
 
+The server is written in TypeScript and run directly with [`tsx`](https://github.com/privatenumber/tsx) — no build step.
+
 ### Prerequisites
 
-- VS Code with GitHub Copilot Chat
-- [Pixi](https://pixi.sh): `curl -fsSL https://pixi.sh/install.sh | bash`
+- [Node.js](https://nodejs.org) 18+ (uses the global `fetch`)
 - NLR API key (free): <https://developer.nlr.gov/signup/>
 
 ### Install
@@ -15,29 +16,26 @@ MCP server for optimizing distributed energy resources using NLR's REopt API. Wo
 ```bash
 git clone https://github.com/bpulluta/REopt-MCP.git
 cd REopt-MCP
-pixi install
+npm install
+export NLR_API_KEY=your_api_key_here   # or put it in a .env
 ```
 
-### Configure VS Code
+The server reads `NLR_API_KEY` (and optionally `REOPT_API_BASE_URL`, `OPENEI_API_KEY`,
+`URDB_API_BASE_URL`) from the environment or a project-root `.env` — see
+[.env.example](.env.example).
 
-1. `Cmd+Shift+P` → **MCP: Open user configuration**
-2. Add:
+### Register the server
 
-```json
-{
-  "mcpServers": {
-    "reopt-dev": {
-      "type": "stdio",
-      "command": "pixi",
-      "args": ["run", "--manifest-path", "/FULL/PATH/TO/REopt-MCP/pixi.toml", "server"],
-      "env": { "NLR_API_KEY": "YOUR_API_KEY" }
-    }
-  }
-}
-```
+The server code is identical for both clients; only the config file differs. Both files
+are committed in this repo and point at `npx tsx src/index.ts`; adjust the absolute
+`cwd` if you cloned elsewhere.
 
-3. Replace the path and API key, then reload the window.
-4. Open Copilot Chat → click ⚙️ → confirm `reopt-dev` shows a checkmark.
+- **Claude Code** — [.mcp.json](.mcp.json) (`mcpServers.reopt`). Enable it in
+  [.claude/settings.json](.claude/settings.json) (`enabledMcpjsonServers: ["reopt"]`),
+  then run `/mcp` to confirm it is healthy.
+- **GitHub Copilot (VS Code 1.99+)** — [.vscode/mcp.json](.vscode/mcp.json)
+  (`servers.reopt`). Reload the window, open Copilot Chat in **Agent mode**, and the
+  `reopt` tools appear.
 
 ## Usage
 
@@ -80,54 +78,47 @@ MCP:  → Builds scenario, submits, returns results with sizing, payback, and NP
 |------|---------|
 | `submitAndWait` | Validate → preview → submit → poll → return results |
 | `validateScenario` | Check a scenario for errors before submission |
-| `getScenarioHelp` | Show structure and examples (`minimal`, `solar`, `all`, etc.) |
+| `getScenarioHelp` | Show structure and examples (`minimal`, `tariff`, `solar`, `all`, etc.) |
 | `getSummary` | Format results as markdown (`results`, `financial`, `system`, `all`) |
+| `searchUrdbRates` | Search the Utility Rate Database for a utility's published rates |
 
 `submitAndWait` uses a two-step gate: the first call (without `confirm`) returns a preview; the second call (with `confirm: true`) submits.
 
 ## Development
 
 ```bash
-pixi run server          # Start MCP server
-pixi run test            # Run unit tests
-pixi run lint            # Lint with Ruff
-pixi run format-check    # Check formatting
-pixi run simulate list   # List tools and schemas
-```
-
-### Simulate tool calls locally
-
-```bash
-pixi run simulate call validateScenario --input tests/fixtures/solar_scenario.json
-pixi run simulate call submitAndWait --input tests/fixtures/solar_scenario.json --mock
-pixi run simulate call getSummary --args '{"run_uuid":"mock-run-001","kind":"all"}' --mock
+npm run server      # Start the MCP server on stdio
+npm test            # Run the vitest suite
+npm run typecheck   # Type-check with tsc --noEmit
 ```
 
 ### Project Structure
 
 ```
-reopt_mcp/
-  tools.py           # MCP tool registration and handlers
-  client.py          # REopt API submit / poll / fetch
-  validation.py      # Scenario validation and guidance
-  summaries.py       # Markdown result formatters
-  config.py          # Environment configuration
-  constants.py       # Shared constants and valid key sets
-  instructions.py    # Canonical MCP instruction text
-  examples.py        # Bundled example scenarios
-  mock.py            # Fixture-based mock API for testing
-  simulate.py        # CLI for offline tool testing
-  server.py          # Entry point
-tests/
+src/
+  index.ts           # MCP tool registration + serveStdio entry point
+  client.ts          # REopt API submit / poll / fetch + array truncation
+  http.ts            # Shared fetch wrapper (30s timeout, api_key query param)
+  urdb.ts            # URDB (OpenEI) rate search
+  validation.ts      # Scenario validation and guidance
+  sections.ts        # Modular section-handler framework
+  tariff.ts          # ElectricTariff validation + TOU schedule compiler
+  summaries.ts       # Markdown result formatters
+  format.ts          # Python-style number formatting helpers
+  config.ts          # Environment configuration
+  constants.ts       # Shared constants and valid key sets
+  instructions.ts    # Canonical MCP instruction text
+  examples.ts        # Bundled example scenarios
+test/
   fixtures/          # Sample scenario and result JSON
-  test_tools.py      # Tool dispatch and simulate CLI
-  test_validation.py # Validation rules
-  test_summaries.py  # Markdown formatting
-  test_examples.py   # Example scenario validity
-  test_client.py     # Mocked HTTP client
-  test_config.py     # Configuration
-  test_integration_api.py  # Live API smoke test (opt-in)
+  tariff.test.ts     # TOU compiler + tariff validators
+  validation.test.ts # Validation rules and guidance
+  summaries.test.ts  # Markdown formatting
+  client.test.ts     # Truncation + polling (mocked fetch)
+  urdb.test.ts       # URDB search (mocked fetch)
 ```
+
+> The original Python implementation lives in `archive/python-server/` for reference.
 
 ## Resources
 

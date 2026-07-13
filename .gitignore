@@ -1,45 +1,24 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-.venv
+# Node / TypeScript
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.vitest/
 
-# Environment variables
+# Environment variables (contains API keys)
 .env
 
-# IDE - keep .vscode/settings.json for MCP configuration
+# Editor / OS
 .idea/
 *.swp
 *.swo
-
-# Distribution
-dist/
-build/
-*.egg-info/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Pixi
-.pixi/
-pixi.lock
-uv.lock
+# Local Claude Code config and dev-only helpers
+.claude/
 
-# Tests outputs
-tests/__pycache__/
-tests/*.pyc
-
-# Archived development docs and notebooks
+# Reference-only material, not published
 archive/
 .github/
+.vscode/

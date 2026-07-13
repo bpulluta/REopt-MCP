@@ -51,21 +51,31 @@ The server intentionally supports a **curated** subset (`PV`, `ElectricStorage`,
 `Wind`, `Generator`). To add another technology (e.g. `CHP`), keep these four places
 in sync so nothing is validated-but-not-summarized or shipped-but-not-validated:
 
-1. **`reopt_mcp/constants.py`** — add the tech name to `KNOWN_TECHNOLOGIES`. Add any
+1. **`src/constants.ts`** — add the tech name to `KNOWN_TECHNOLOGIES`. Add any
    new valid-key sets (mirror `VALID_ELECTRIC_TARIFF_KEYS`) using names verified in
    `inputs.md`.
-2. **`reopt_mcp/validation.py`** — the `KNOWN_TECHNOLOGIES` object-type check applies
+2. **`src/validation.ts`** — the `KNOWN_TECHNOLOGIES` object-type check applies
    automatically; add value/range checks for any required numeric inputs (follow the
-   `_validate_coordinate` / blended-rate patterns, and `_is_number`).
-3. **`reopt_mcp/summaries.py`** — add a `_sized(outputs, "<Tech>")` block in
-   `format_results_summary`, `format_system_summary`, and `build_submit_summary`, and
+   `validateCoordinate` / blended-rate patterns, and `isNumber`).
+3. **`src/summaries.ts`** — add a `sized(outputs, "<Tech>")` block in
+   `formatResultsSummary`, `formatSystemSummary`, and `buildSubmitSummary`, and
    add the tech to `TECH_ORDER`. Use output field names verified in `outputs.md`.
-4. **`reopt_mcp/examples.py`** — add a canonical example scenario; it must pass
-   `validate_scenario` (enforced by `tests/test_examples.py`).
+4. **`src/examples.ts`** — add a canonical example scenario; it must pass
+   `validateScenario` (covered by the validation/summary tests).
 
-Then add tests mirroring `tests/test_validation.py` and `tests/test_summaries.py`,
-and a fixture under `tests/fixtures/` if a summary needs sample output. Run
-`pixi run test && pixi run lint && pixi run format-check`.
+Then add tests mirroring `test/validation.test.ts` and `test/summaries.test.ts`,
+and a fixture under `test/fixtures/` if a summary needs sample output. Run
+`npm test && npm run typecheck`.
+
+### Adding richer support for a scenario section (shorthands + validation)
+
+Section handling is modular via `src/sections.ts`: each section gets a handler
+with `expand` (compile human-friendly shorthands into canonical REopt keys),
+`validate`, and `warnings`. `ElectricTariff` is the reference implementation in
+`src/tariff.ts` (blended / monthly / TOU-schedule / URDB). To give another
+section the same treatment (e.g. `ElectricLoad` blended DOE profiles), write a handler
+and append it to `SECTION_HANDLERS` — `validateSections`, `sectionWarnings`, and the
+submit-time normalization step pick it up automatically.
 
 ## Contract reminders (already enforced in code)
 

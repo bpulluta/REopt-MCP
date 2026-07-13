@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "reopt": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"],
+      "cwd": "/Users/bpulluta/REopt-MCP",
+      "env": {
+        "NODE_OPTIONS": "--use-system-ca"
+      }
+    }
+  }
+}
