@@ -27,7 +27,7 @@ import {
   formatResultsSummary,
   formatSystemSummary,
 } from "./summaries.js";
-import { searchUrdbRates } from "./urdb.js";
+import { searchUrdbRates, urdbViewUrl } from "./urdb.js";
 import {
   guidanceForErrors,
   scenarioWarnings,
@@ -145,6 +145,11 @@ async function submitAndWait(args: {
       // Shorthand was expanded; show the compiled payload with large arrays
       // collapsed to summary stats so the user sees exactly what REopt receives.
       preview.normalized_preview = truncateLargeArrays(normalized);
+    }
+    // Give the user a link to verify a URDB tariff before they approve it.
+    const tariff = scenario.ElectricTariff;
+    if (isDict(tariff) && isNonEmptyString(tariff.urdb_label)) {
+      preview.urdb_label_url = urdbViewUrl(tariff.urdb_label);
     }
     return text(preview);
   }
@@ -365,9 +370,13 @@ async function searchUrdbRatesTool(args: {
       rates: results,
       next_step:
         results.length > 0
-          ? "Show these to the user. Once they choose one, set " +
-            "ElectricTariff.urdb_label to its 'label' value."
-          : "No rates found. Try a different utility name or ZIP code.",
+          ? "Always show these candidates to the user (name, utility, " +
+            "active/expired, approved, and view_url) and let them pick — don't " +
+            "auto-select. They are ranked latest-active-first, so the top row is " +
+            "usually the current tariff, but confirm it matches theirs. Once " +
+            "they choose, set ElectricTariff.urdb_label to its 'label' value."
+          : "No rates found. Try a different utility name or ZIP code, or pass " +
+            "sector (Residential/Commercial/Industrial/Lighting).",
     });
   } catch (error) {
     if (error instanceof HttpStatusError) {
@@ -479,9 +488,11 @@ function createServer(): McpServer {
     {
       description:
         "Search the Utility Rate Database (URDB) for a utility's published " +
-        "rates. Provide 'utility' (name) and/or 'address' (address or ZIP); " +
-        "returns candidate rates with their urdb_label. Show the options to the " +
-        "user, then put the chosen label in ElectricTariff.urdb_label.",
+        "rates. Provide 'utility' (name) and/or 'address' (address or ZIP), and " +
+        "'sector' when the building type implies one. Returns candidates ranked " +
+        "latest-active-first, each with a urdb_label, an active/expired flag, an " +
+        "effective_period, and a view_url to open the rate. Show the options to " +
+        "the user, then put the chosen label in ElectricTariff.urdb_label.",
       inputSchema: z.object({
         utility: z
           .string()
