@@ -9,7 +9,8 @@
 			],
 			"cwd": "/Users/bpulluta/REopt-MCP",
 			"env": {
-				"NLR_API_KEY": "${env:NLR_API_KEY}"
+				"NODE_OPTIONS": "--use-system-ca",
+				"REOPT_TLS_INSECURE": "1"
 			}
 		}
 	}

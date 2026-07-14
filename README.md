@@ -6,6 +6,8 @@ MCP server for optimizing distributed energy resources using NLR's REopt API. Wo
 
 The server is written in TypeScript and run directly with [`tsx`](https://github.com/privatenumber/tsx) — no build step.
 
+For external testers and non-developers, use [NONTECHNICAL_TESTER_SETUP.md](NONTECHNICAL_TESTER_SETUP.md) as the canonical onboarding guide.
+
 ### Prerequisites
 
 - [Node.js](https://nodejs.org) 18+ (uses the global `fetch`)
@@ -23,6 +25,9 @@ export NLR_API_KEY=your_api_key_here   # or put it in a .env
 The server reads `NLR_API_KEY` (and optionally `REOPT_API_BASE_URL`, `OPENEI_API_KEY`,
 `URDB_API_BASE_URL`) from the environment or a project-root `.env` — see
 [.env.example](.env.example).
+
+Do not set `NLR_API_KEY` inside `.vscode/mcp.json` or `.mcp.json` `env` blocks.
+Those files should only contain runtime flags (for example `NODE_OPTIONS`).
 
 ### Register the server
 
