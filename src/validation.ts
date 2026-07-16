@@ -1,184 +1,33 @@
-/** Scenario validation and guidance. */
+/** Top-level scenario validation and guidance.
+ *
+ * This is a thin orchestrator. It enforces the cross-section invariants that don't
+ * belong to any single module (required sections; the on-grid/off-grid ElectricTariff
+ * rule) and then delegates all per-section content checks to the module registry
+ * (src/modules/index.ts). Each module owns the details of its own section.
+ */
 
+import { isDict, type Dict } from "./guards.js";
 import {
-  INVALID_SITE_FIELDS,
   KNOWN_TECHNOLOGIES,
-  LATITUDE_RANGE,
-  LONGITUDE_RANGE,
-  VALID_DOE_REFERENCE_NAMES,
-} from "./constants.js";
-import { sectionWarnings, validateSections } from "./sections.js";
-import { quotedList } from "./format.js";
+  REQUIRED_MODULES,
+  moduleWarnings,
+  validateModules,
+} from "./modules/index.js";
+import { readOffGridFlag } from "./modules/settings.js";
 
-type Dict = Record<string, unknown>;
-
-/** True for real numbers, excluding bool. */
-function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isDict(value: unknown): value is Dict {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/** Truthiness check: empty dict/list/string, 0, null, and false are all falsy. */
-function isTruthy(value: unknown): boolean {
-  if (value === null || value === undefined) return false;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
-  if (typeof value === "string") return value.length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === "object") return Object.keys(value).length > 0;
-  return true;
-}
-
-/** Render a number with a trailing `.0` for whole values, e.g. `90.0` not `90`. */
-function floatStr(x: number): string {
-  return Number.isInteger(x) ? `${x}.0` : `${x}`;
-}
-
-/** Render strings as a quoted, brace-wrapped set (sorted), e.g. `{'a', 'b'}`. */
-function bracedList(items: string[]): string {
-  return `{${[...items].sort().map((s) => `'${s}'`).join(", ")}}`;
-}
-
-function validateCoordinate(
-  site: Dict,
-  field: string,
-  bounds: readonly [number, number],
-  errors: string[],
-): void {
-  if (!(field in site)) {
-    errors.push(`Site missing '${field}'`);
-    return;
-  }
-  const value = site[field];
-  if (!isNumber(value)) {
-    errors.push(`Site '${field}' must be a number`);
-    return;
-  }
-  const [low, high] = bounds;
-  if (!(low <= value && value <= high)) {
-    errors.push(
-      `Site '${field}' must be between ${floatStr(low)} and ${floatStr(high)} (got ${value})`,
-    );
-  }
-}
-
-/** Validate that scenario has all required fields and no invalid assumptions. */
+/** Validate that a scenario has all required fields and no invalid assumptions. */
 export function validateScenario(scenario: unknown): [boolean, string[]] {
   if (!isDict(scenario)) return [false, ["Scenario must be an object"]];
 
   const errors: string[] = [];
+  const offGridFlag = readOffGridFlag(scenario);
 
-  const settings = "Settings" in scenario ? scenario.Settings : {};
-  let offGridFlag = false;
-  if (isTruthy(settings)) {
-    if (!isDict(settings)) {
-      errors.push("Settings must be an object when provided");
-    } else if ("off_grid_flag" in settings) {
-      if (typeof settings.off_grid_flag === "boolean") {
-        offGridFlag = settings.off_grid_flag;
-      } else {
-        errors.push("Settings 'off_grid_flag' must be a boolean");
-      }
-    }
+  // Required sections (Site, ElectricLoad) must be present.
+  for (const m of REQUIRED_MODULES) {
+    if (!(m.key in scenario)) errors.push(`Missing '${m.key}' object`);
   }
 
-  if (!("Site" in scenario)) {
-    errors.push("Missing 'Site' object");
-  } else if (!isDict(scenario.Site)) {
-    errors.push("Site must be an object");
-  } else {
-    const site = scenario.Site;
-    const invalidFields = Object.keys(site).filter((k) => INVALID_SITE_FIELDS.has(k));
-    if (invalidFields.length > 0) {
-      errors.push(
-        `Site contains invalid fields: ${bracedList(invalidFields)}. Only use latitude/longitude.`,
-      );
-    }
-    validateCoordinate(site, "latitude", LATITUDE_RANGE, errors);
-    validateCoordinate(site, "longitude", LONGITUDE_RANGE, errors);
-  }
-
-  if (!("ElectricLoad" in scenario)) {
-    errors.push("Missing 'ElectricLoad' object");
-  } else {
-    const load = scenario.ElectricLoad;
-    if (!isDict(load)) {
-      errors.push("ElectricLoad must be an object");
-      return [errors.length === 0, errors];
-    }
-
-    if (!("doe_reference_name" in load)) {
-      errors.push("ElectricLoad missing 'doe_reference_name'");
-    } else if (!VALID_DOE_REFERENCE_NAMES.has(load.doe_reference_name as string)) {
-      errors.push(
-        `Invalid doe_reference_name: '${load.doe_reference_name}'. Must be one of: ${[
-          ...VALID_DOE_REFERENCE_NAMES,
-        ]
-          .sort()
-          .join(", ")}`,
-      );
-    }
-
-    if (!("annual_kwh" in load)) {
-      errors.push("ElectricLoad missing 'annual_kwh'");
-    } else if (!isNumber(load.annual_kwh) || (load.annual_kwh as number) <= 0) {
-      errors.push("ElectricLoad 'annual_kwh' must be a positive number");
-    }
-
-    if ("critical_load_fraction" in load) {
-      const fraction = load.critical_load_fraction;
-      if (!isNumber(fraction) || !(fraction >= 0.0 && fraction <= 1.0)) {
-        errors.push(
-          "ElectricLoad 'critical_load_fraction' must be a number between 0 and 1",
-        );
-      }
-    }
-
-    const blendedNames = load.blended_doe_reference_names;
-    const blendedPercents = load.blended_doe_reference_percents;
-    if (
-      (blendedNames !== undefined && blendedNames !== null) ||
-      (blendedPercents !== undefined && blendedPercents !== null)
-    ) {
-      if (!Array.isArray(blendedNames) || !Array.isArray(blendedPercents)) {
-        errors.push(
-          "ElectricLoad blended DOE inputs must include both list fields: 'blended_doe_reference_names' and 'blended_doe_reference_percents'",
-        );
-      } else if (blendedNames.length !== blendedPercents.length) {
-        errors.push("ElectricLoad blended DOE inputs must have matching lengths");
-      } else if (blendedNames.length === 0) {
-        errors.push("ElectricLoad blended DOE inputs cannot be empty when provided");
-      } else {
-        const invalidNames = blendedNames.filter(
-          (name) => !VALID_DOE_REFERENCE_NAMES.has(name as string),
-        );
-        if (invalidNames.length > 0) {
-          errors.push(
-            `ElectricLoad blended_doe_reference_names contains invalid entries: ${quotedList(
-              invalidNames.map((n) => String(n)),
-            )}`,
-          );
-        }
-
-        if (!blendedPercents.every((p) => typeof p === "number")) {
-          errors.push(
-            "ElectricLoad blended_doe_reference_percents must be numeric values",
-          );
-        } else {
-          const total = blendedPercents.reduce((a, b) => a + (b as number), 0);
-          if (Math.abs(total - 1.0) > 1e-6) {
-            errors.push(
-              "ElectricLoad blended_doe_reference_percents must sum to 1.0",
-            );
-          }
-        }
-      }
-    }
-  }
-
+  // Cross-section rule: on-grid needs ElectricTariff; off-grid forbids it.
   const offGridTariffPresent = offGridFlag && "ElectricTariff" in scenario;
   if (offGridTariffPresent) {
     errors.push(
@@ -188,6 +37,7 @@ export function validateScenario(scenario: unknown): [boolean, string[]] {
     errors.push("Missing 'ElectricTariff' object");
   }
 
+  // Technologies must be objects ({} lets REopt optimize sizing).
   for (const tech of [...KNOWN_TECHNOLOGIES].sort()) {
     if (tech in scenario && !isDict(scenario[tech])) {
       errors.push(
@@ -196,11 +46,10 @@ export function validateScenario(scenario: unknown): [boolean, string[]] {
     }
   }
 
-  // Delegate per-section content checks (ElectricTariff rate modes, and any future
-  // sections) to their handlers. Skip ElectricTariff when its mere presence off-grid
-  // is already flagged above.
+  // Delegate per-section content checks to their modules. Skip ElectricTariff when
+  // its mere presence off-grid is already flagged above.
   const skip = offGridTariffPresent ? new Set(["ElectricTariff"]) : null;
-  errors.push(...validateSections(scenario, skip));
+  errors.push(...validateModules(scenario, skip));
 
   return [errors.length === 0, errors];
 }
@@ -218,7 +67,7 @@ export function scenarioWarnings(scenario: unknown): string[] {
     );
   }
 
-  warnings.push(...sectionWarnings(scenario));
+  warnings.push(...moduleWarnings(scenario));
   return warnings;
 }
 

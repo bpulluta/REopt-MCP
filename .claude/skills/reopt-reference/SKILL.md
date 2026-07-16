@@ -45,43 +45,43 @@ Location: `dev-docs/reoptjl_docs/bundles/` (crawled from NLR's REopt.jl site).
 - Report an output field the docs don't list. If a summary needs a metric, confirm
   the field name in `outputs.md` first.
 
-## Extending the server (add a technology or input)
+## Extending the server (add a technology or section)
 
-The server intentionally supports a **curated** subset (`PV`, `ElectricStorage`,
-`Wind`, `Generator`). To add another technology (e.g. `CHP`), keep these four places
-in sync so nothing is validated-but-not-summarized or shipped-but-not-validated:
+Every scenario section and technology is now a single `ScenarioModule`
+(`src/modules/types.ts`) in one registry — adding coverage is **one new file plus one
+line**, not a four-file edit. `PV`/`ElectricStorage`/`Wind`/`Generator` and
+`Site`/`ElectricLoad`/`Settings`/`ElectricTariff` all follow the same contract.
 
-1. **`src/constants.ts`** — add the tech name to `KNOWN_TECHNOLOGIES`. Add any
-   new valid-key sets (mirror `VALID_ELECTRIC_TARIFF_KEYS`) using names verified in
-   `inputs.md`.
-2. **`src/validation.ts`** — the `KNOWN_TECHNOLOGIES` object-type check applies
-   automatically; add value/range checks for any required numeric inputs (follow the
-   `validateCoordinate` / blended-rate patterns, and `isNumber`).
-3. **`src/summaries.ts`** — add a `sized(outputs, "<Tech>")` block in
-   `formatResultsSummary`, `formatSystemSummary`, and `buildSubmitSummary`, and
-   add the tech to `TECH_ORDER`. Use output field names verified in `outputs.md`.
-4. **`src/examples.ts`** — add a canonical example scenario; it must pass
-   `validateScenario` (covered by the validation/summary tests).
+To add a technology (e.g. `CHP`) or section:
 
-Then add tests mirroring `test/validation.test.ts` and `test/summaries.test.ts`,
-and a fixture under `test/fixtures/` if a summary needs sample output. Run
-`npm test && npm run typecheck`.
+1. **Write `src/modules/<name>.ts`** implementing `ScenarioModule`
+   (`key`, `kind`, optional `expand`/`validate`/`warnings`/`example`, and for
+   technologies `summarizeResults`/`summarizeSystem`). Copy the closest existing
+   module: `src/modules/pv.ts` (technology), `src/modules/electric-tariff.ts` (rich
+   section with shorthands), or `src/modules/site.ts` (simple required section). Use
+   input keys from `inputs.md` and output field names from `outputs.md`.
+2. **Register it** in `src/modules/index.ts` by adding one entry to
+   `SCENARIO_MODULES`. `KNOWN_TECHNOLOGIES`, `TECH_ORDER`, `validateModules`,
+   `normalizeScenario`, `moduleWarnings`, and the summary composers all pick it up
+   automatically — no edits to `validation.ts`, `summaries.ts`, or `constants.ts`.
+3. **Add an example** via the module's `example()` (and a named scenario in
+   `src/examples.ts` if useful).
+4. **Add tests** mirroring `test/modules.test.ts` / `test/tariff.test.ts`, plus a
+   `test/fixtures/` sample if a summary needs output. Run `npm test && npm run typecheck`.
 
-### Adding richer support for a scenario section (shorthands + validation)
-
-Section handling is modular via `src/sections.ts`: each section gets a handler
-with `expand` (compile human-friendly shorthands into canonical REopt keys),
-`validate`, and `warnings`. `ElectricTariff` is the reference implementation in
-`src/tariff.ts` (blended / monthly / TOU-schedule / URDB). To give another
-section the same treatment (e.g. `ElectricLoad` blended DOE profiles), write a handler
-and append it to `SECTION_HANDLERS` — `validateSections`, `sectionWarnings`, and the
-submit-time normalization step pick it up automatically.
+Cross-section rules that belong to no single module (required sections; the
+on-grid/off-grid ElectricTariff rule) live in `src/validation.ts`. See
+`CONTRIBUTING.md` and `ARCHITECTURE.md` for the full recipe and data flow.
 
 ## Contract reminders (already enforced in code)
 
 - On-grid requires `ElectricTariff`; off-grid sets `Settings.off_grid_flag=true` and
   omits it.
-- `ElectricLoad` needs both `doe_reference_name` (valid DOE profile) and `annual_kwh`.
+- `ElectricLoad` needs a load *source* — `doe_reference_name`, `blended_doe_reference_names`,
+  `loads_kw` (8760/17520/35040 values), or the server-side `loads_csv` shorthand (a file
+  path the server reads into `loads_kw`; REopt.jl's `path_to_csv` does NOT work via the
+  hosted API) — plus, usually, a *scaler* (`annual_kwh`, `monthly_totals_kwh`, or
+  `monthly_peaks_kw`). See `src/modules/electric-load.ts`.
 - `Site` accepts only `latitude` (-90..90) and `longitude` (-180..180) — never
   address/city fields.
 - `submitAndWait` previews first; it only submits when called with `confirm=true`.

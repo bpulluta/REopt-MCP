@@ -9,6 +9,8 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import type { ToolAnnotations } from "@modelcontextprotocol/server";
 import * as z from "zod";
 
+import { createRequire } from "node:module";
+
 import { applyTlsConfig, warnIfUnconfigured } from "./config.js";
 import {
   getJobData,
@@ -17,12 +19,19 @@ import {
   truncateLargeArrays,
 } from "./client.js";
 import { HttpStatusError } from "./http.js";
-import { KNOWN_TECHNOLOGIES, VALID_DOE_REFERENCE_NAMES } from "./constants.js";
+import { VALID_DOE_REFERENCE_NAMES } from "./constants.js";
+import { isDict, isNonEmptyString, type Dict } from "./guards.js";
+import { KNOWN_TECHNOLOGIES, normalizeScenario } from "./modules/index.js";
+import { errorResult, text, type ToolResult } from "./responses.js";
 import { DEFAULT_INSTRUCTIONS } from "./instructions.js";
-import { getAllExamples, getBaseInputs, getTariffHelp } from "./examples.js";
-import { normalizeScenario } from "./sections.js";
 import {
-  buildSubmitSummary,
+  getAllExamples,
+  getBaseInputs,
+  getLoadHelp,
+  getTariffHelp,
+} from "./examples.js";
+import {
+  detectResultAnomalies,
   formatFinancialSummary,
   formatResultsSummary,
   formatSystemSummary,
@@ -34,7 +43,10 @@ import {
   validateScenario,
 } from "./validation.js";
 
-type Dict = Record<string, unknown>;
+const require = createRequire(import.meta.url);
+const { version: PACKAGE_VERSION } = require("../package.json") as {
+  version: string;
+};
 
 const READ_ONLY: ToolAnnotations = {
   readOnlyHint: true,
@@ -55,33 +67,6 @@ const SUMMARY_FORMATTERS: Record<string, (outputs: Dict) => string> = {
   financial: formatFinancialSummary,
   system: formatSystemSummary,
 };
-
-type ToolResult = { content: { type: "text"; text: string }[] };
-
-function text(payload: unknown): ToolResult {
-  const body =
-    typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
-  return { content: [{ type: "text", text: body }] };
-}
-
-function errorResult(
-  message: string,
-  opts: { status?: string; next_step?: string } & Dict = {},
-): ToolResult {
-  const { status = "invalid_request", next_step, ...extra } = opts;
-  const body: Dict = { status, error: message };
-  if (next_step) body.next_step = next_step;
-  Object.assign(body, extra);
-  return text(body);
-}
-
-function isDict(value: unknown): value is Dict {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
 
 function requestedTechnologies(scenario: Dict): string[] {
   return [...KNOWN_TECHNOLOGIES].sort().filter((tech) => tech in scenario);
@@ -165,25 +150,54 @@ async function submitAndWait(args: {
     }
 
     const pollResult = await pollUntilComplete(runUuid, maxWaitSeconds);
-    if (pollResult.status !== "complete") {
-      return text(pollResult);
+
+    // A timeout is NOT a failure — the job was accepted and is still solving.
+    // Return the run_uuid with explicit guidance so the caller retrieves the
+    // results later instead of reading "timeout" as broken and resubmitting.
+    if (pollResult.status === "timeout") {
+      return text({
+        ...pollResult,
+        submission_status: "submitted",
+        next_step:
+          "The job was submitted successfully and is still solving — this is " +
+          "NOT a failure. REopt runs with PV and storage often take several " +
+          "minutes. Do NOT resubmit (that starts a duplicate job). Wait ~60 " +
+          "seconds, then call getSummary with this run_uuid to retrieve the " +
+          "results.",
+      });
+    }
+
+    // A terminal solver error: the job was submitted but REopt rejected it.
+    if (pollResult.status === "error") {
+      return text({
+        ...pollResult,
+        submission_status: "submitted",
+        next_step:
+          "REopt rejected the run. Read 'messages' for the solver error, fix " +
+          "the offending input, and resubmit with confirm=true.",
+      });
     }
 
     const outputs = (pollResult.result.outputs as Dict) ?? {};
+    const resultWarnings = [...warnings, ...detectResultAnomalies(outputs)];
     return text({
       status: "success",
       submission_status: "submitted",
       run_uuid: runUuid,
       elapsed_seconds: pollResult.elapsed_seconds,
-      warnings,
-      summary: buildSubmitSummary(
-        runUuid,
-        pollResult.elapsed_seconds,
-        pollResult.job_status,
-        outputs,
-      ),
+      warnings: resultWarnings,
+      // The fully rendered markdown is the whole answer — present it verbatim.
+      results_markdown: formatResultsSummary(outputs),
+      // Structured outputs for any follow-up question. Time series are already
+      // collapsed to summary stats upstream (pollUntilComplete →
+      // getJobDataTruncated), so this is safe to return without re-truncating.
       outputs,
       messages: pollResult.result.messages ?? {},
+      next_step:
+        "Show 'results_markdown' to the user directly as your reply. Do NOT " +
+        "save it to a file, download it, or re-parse the raw outputs JSON. For " +
+        "a deeper financial or system breakdown, call getSummary with this " +
+        "run_uuid.",
     });
   } catch (error) {
     if (error instanceof HttpStatusError) {
@@ -224,7 +238,13 @@ function validateScenarioTool(scenario: unknown): ToolResult {
 
 function getScenarioHelp(name: string): ToolResult {
   const allExamples = getAllExamples();
-  const validNames = ["minimal", "tariff", "all", ...Object.keys(allExamples).sort()];
+  const validNames = [
+    "minimal",
+    "tariff",
+    "load",
+    "all",
+    ...Object.keys(allExamples).sort(),
+  ];
 
   if (name === "minimal") {
     return text({
@@ -234,7 +254,7 @@ function getScenarioHelp(name: string): ToolResult {
       building_types: [...VALID_DOE_REFERENCE_NAMES].sort(),
       supported_technologies: [...KNOWN_TECHNOLOGIES].sort(),
       notes: [
-        "ElectricLoad needs both doe_reference_name and annual_kwh.",
+        "ElectricLoad needs a load source (doe_reference_name, blended_doe_reference_names, loads_kw, or loads_csv) plus a scaler such as annual_kwh or monthly_totals_kwh. See getScenarioHelp('load').",
         "Add empty {} for each technology to evaluate (PV, ElectricStorage, Wind, Generator).",
         "On-grid scenarios require ElectricTariff. Rate modes: blended annual, monthly, time-of-use (tou_energy_schedule), or a URDB label. See getScenarioHelp('tariff').",
         "Don't know the URDB label? Use searchUrdbRates with the utility name or ZIP.",
@@ -246,6 +266,10 @@ function getScenarioHelp(name: string): ToolResult {
 
   if (name === "tariff") {
     return text(getTariffHelp());
+  }
+
+  if (name === "load") {
+    return text(getLoadHelp());
   }
 
   if (name === "all") {
@@ -397,7 +421,7 @@ const scenarioSchema = z.record(z.string(), z.unknown());
 
 function createServer(): McpServer {
   const server = new McpServer(
-    { name: "reopt-mcp", version: "0.4.0" },
+    { name: "reopt-mcp", version: PACKAGE_VERSION },
     { instructions: DEFAULT_INSTRUCTIONS },
   );
 
@@ -453,14 +477,15 @@ function createServer(): McpServer {
       description:
         "Show scenario structure and examples. Use name='minimal' for required " +
         "fields, 'tariff' for the electricity rate guide (blended / monthly / " +
-        "time-of-use / URDB), 'all' for every example, or a key like 'solar' or " +
-        "'solar_battery'.",
+        "time-of-use / URDB), 'load' for the ElectricLoad input guide (reference " +
+        "building / blended / loads_kw / CSV / scalers), 'all' for every example, " +
+        "or a key like 'solar' or 'solar_battery'.",
       inputSchema: z.object({
         name: z
           .string()
           .optional()
           .describe(
-            "minimal | tariff | all | solar | solar_battery | monthly_rates | tou_rates | urdb | pv_and_storage | resilience | wind",
+            "minimal | tariff | load | all | solar | solar_battery | monthly_rates | tou_rates | urdb | pv_and_storage | resilience | wind",
           ),
       }),
       annotations: READ_ONLY,

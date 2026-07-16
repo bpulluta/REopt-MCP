@@ -1,7 +1,7 @@
 /** REopt API client and polling helpers. */
 
 import { NLR_API_KEY, REOPT_API_BASE_URL } from "./config.js";
-import { httpGetJson, httpPostJson } from "./http.js";
+import { httpGetJson, httpPostJson, HttpStatusError } from "./http.js";
 import { roundTo } from "./format.js";
 
 export interface PollComplete {
@@ -26,6 +26,8 @@ export interface PollError {
   run_uuid: string;
   elapsed_seconds: number;
   poll_count: number;
+  /** Solver messages (errors/warnings) when REopt reports job_status "error". */
+  messages?: unknown;
 }
 
 export type PollResult = PollComplete | PollTimeout | PollError;
@@ -68,17 +70,35 @@ export function truncateLargeArrays(data: unknown): unknown {
   return data;
 }
 
-/** POST a scenario to the REopt API and return the run UUID. */
+/** POST a scenario to the REopt API and return the run UUID.
+ *
+ * A single retry covers a transient network blip on the submit itself (we saw
+ * the POST abort at the socket timeout once, then succeed on the next attempt).
+ * Only plain network errors (DNS/TLS/timeout abort) are retried: those mean no
+ * job was created on the server, so re-POSTing is safe. An {@link HttpStatusError}
+ * means REopt *responded* (e.g. a 4xx from a bad payload) — retrying would just
+ * fail again and could duplicate work, so it propagates immediately.
+ */
 export async function submitJob(scenario: unknown): Promise<string | undefined> {
-  const payload = (await httpPostJson(
-    `${REOPT_API_BASE_URL}/job`,
-    { api_key: NLR_API_KEY },
-    scenario,
-    "REopt API",
-    "REOPT_API_BASE_URL",
-  )) as Record<string, unknown>;
-  const runUuid = payload?.run_uuid;
-  return typeof runUuid === "string" ? runUuid : undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const payload = (await httpPostJson(
+        `${REOPT_API_BASE_URL}/job`,
+        { api_key: NLR_API_KEY },
+        scenario,
+        "REopt API",
+        "REOPT_API_BASE_URL",
+      )) as Record<string, unknown>;
+      const runUuid = payload?.run_uuid;
+      return typeof runUuid === "string" ? runUuid : undefined;
+    } catch (error) {
+      if (error instanceof HttpStatusError) throw error;
+      lastError = error;
+      if (attempt === 0) await sleep(750);
+    }
+  }
+  throw lastError;
 }
 
 /** GET full results for a completed REopt run. */
@@ -136,6 +156,20 @@ export async function pollUntilComplete(
           run_uuid: runUuid,
           elapsed_seconds: Math.trunc(elapsed),
           poll_count: pollCount,
+        };
+      }
+
+      // A REopt "error" status is terminal — the solver rejected the run. Bail
+      // out immediately with its messages instead of polling until timeout
+      // (which made a failed run look "stuck" for the full maxWaitSeconds).
+      if (jobStatus === "error") {
+        return {
+          status: "error",
+          error: "REopt job failed with status 'error'.",
+          run_uuid: runUuid,
+          elapsed_seconds: Math.trunc(elapsed),
+          poll_count: pollCount,
+          messages: result.messages ?? {},
         };
       }
 

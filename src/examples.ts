@@ -1,10 +1,18 @@
 /** Example REopt scenarios.
  *
- * Most scenarios use minimal inputs (only Site, ElectricLoad, ElectricTariff) to let
- * REopt automatically optimize system sizes.
+ * Core section fragments (Site, ElectricLoad, ElectricTariff) and technology
+ * fragments are pulled from each module's `example()` so an example can never
+ * reference a section or technology the server doesn't actually implement. Most
+ * scenarios use minimal inputs to let REopt optimize system sizes.
  */
 
-type Dict = Record<string, unknown>;
+import type { Dict } from "./guards.js";
+import { moduleFor } from "./modules/index.js";
+
+/** A fresh copy of a module's example fragment (empty dict if it has none). */
+function frag(key: string): Dict {
+  return structuredClone(moduleFor(key)?.example?.() ?? {});
+}
 
 /** The 3 required inputs — no technologies. Use as a starting point.
  *
@@ -14,27 +22,24 @@ type Dict = Record<string, unknown>;
  */
 export function getBaseInputs(): Dict {
   return {
-    Site: { latitude: 39.7407, longitude: -104.989 },
-    ElectricLoad: { doe_reference_name: "MediumOffice", annual_kwh: 500000 },
-    ElectricTariff: {
-      blended_annual_energy_rate: 0.12,
-      blended_annual_demand_rate: 15.0,
-    },
+    Site: frag("Site"),
+    ElectricLoad: frag("ElectricLoad"),
+    ElectricTariff: frag("ElectricTariff"),
   };
 }
 
 /** Evaluate solar PV only - no constraints. */
 export function getSolarScenario(): Dict {
   const scenario = getBaseInputs();
-  scenario.PV = {};
+  scenario.PV = frag("PV");
   return scenario;
 }
 
 /** Evaluate solar + battery - no constraints. */
 export function getSolarBatteryScenario(): Dict {
   const scenario = getBaseInputs();
-  scenario.PV = {};
-  scenario.ElectricStorage = {};
+  scenario.PV = frag("PV");
+  scenario.ElectricStorage = frag("ElectricStorage");
   return scenario;
 }
 
@@ -54,9 +59,9 @@ export function getResilienceScenario(): Dict {
     annual_kwh: 5000000,
     critical_load_fraction: 0.5,
   };
-  scenario.PV = {};
-  scenario.ElectricStorage = {};
-  scenario.Generator = {};
+  scenario.PV = frag("PV");
+  scenario.ElectricStorage = frag("ElectricStorage");
+  scenario.Generator = frag("Generator");
   scenario.Financial = { value_of_lost_load_per_kwh: 100.0 };
   return scenario;
 }
@@ -70,7 +75,7 @@ export function getMonthlyRatesScenario(): Dict {
     ],
     monthly_demand_rates: [12, 12, 13, 14, 16, 20, 22, 22, 18, 14, 12, 12],
   };
-  scenario.PV = {};
+  scenario.PV = frag("PV");
   return scenario;
 }
 
@@ -90,7 +95,7 @@ export function getTouRatesScenario(): Dict {
     },
     monthly_demand_rates: [12, 12, 13, 14, 16, 20, 22, 22, 18, 14, 12, 12],
   };
-  scenario.PV = {};
+  scenario.PV = frag("PV");
   return scenario;
 }
 
@@ -98,7 +103,7 @@ export function getTouRatesScenario(): Dict {
 export function getUrdbScenario(): Dict {
   const scenario = getBaseInputs();
   scenario.ElectricTariff = { urdb_label: "5ed6c1a15457a3367add15ae" };
-  scenario.PV = {};
+  scenario.PV = frag("PV");
   return scenario;
 }
 
@@ -107,9 +112,9 @@ export function getWindScenario(): Dict {
   const scenario = getBaseInputs();
   (scenario.Site as Dict).latitude = 41.8781;
   (scenario.Site as Dict).longitude = -87.6298; // Chicago
-  scenario.PV = {};
-  scenario.Wind = {};
-  scenario.ElectricStorage = {};
+  scenario.PV = frag("PV");
+  scenario.Wind = frag("Wind");
+  scenario.ElectricStorage = frag("ElectricStorage");
   return scenario;
 }
 
@@ -174,6 +179,76 @@ export function getTariffHelp(): Dict {
       monthly_rates: getMonthlyRatesScenario().ElectricTariff,
       tou_rates: getTouRatesScenario().ElectricTariff,
       urdb: getUrdbScenario().ElectricTariff,
+    },
+  };
+}
+
+/** Guide to every supported ElectricLoad input mode, simple to advanced. */
+export function getLoadHelp(): Dict {
+  return {
+    status: "success",
+    name: "load",
+    title: "ElectricLoad input modes",
+    description:
+      "REopt needs a load SOURCE (the shape of demand) and usually a SCALER (how " +
+      "much energy). Pick the source that matches what the user has; add a scaler " +
+      "to match their actual usage. Ask before assuming.",
+    sources: [
+      {
+        source: "doe_reference_name",
+        when: "You only know the building type. Uses a DOE reference profile.",
+        keys: { doe_reference_name: "e.g. 'MediumOffice' (see getScenarioHelp('minimal') for the list)" },
+      },
+      {
+        source: "blended_doe_reference_names",
+        when: "The building is a mix of types (e.g. office + warehouse).",
+        keys: {
+          blended_doe_reference_names: "list of building types",
+          blended_doe_reference_percents: "matching weights, 0-1, summing to 1.0",
+        },
+      },
+      {
+        source: "loads_kw",
+        when: "You have the actual hourly demand profile.",
+        keys: {
+          loads_kw:
+            "8760 values (or 17520/35040 for Settings.time_steps_per_hour 2/4), kW per step",
+        },
+      },
+      {
+        source: "loads_csv",
+        when: "The hourly profile is in a CSV file on this machine.",
+        keys: {
+          loads_csv:
+            "path to a CSV with one kW value per row (optional header). The server " +
+            "reads it and compiles it into loads_kw. NOTE: REopt.jl's 'path_to_csv' " +
+            "does NOT work through the hosted API — use loads_csv.",
+        },
+      },
+    ],
+    scalers: {
+      annual_kwh: "one annual total, kWh",
+      monthly_totals_kwh: "12 monthly totals (Jan..Dec), kWh",
+      monthly_peaks_kw: "12 monthly peak demands (Jan..Dec), kW",
+    },
+    notes: [
+      "With a reference profile, a scaler (annual_kwh or monthly_totals_kwh) is " +
+        "strongly recommended so the profile matches actual usage.",
+      "To scale an explicit loads_kw/loads_csv profile with a scaler, also set " +
+        "normalize_and_scale_load_profile_input=true; otherwise the profile is used as-is.",
+      "Sub-hourly data requires Settings.time_steps_per_hour = 2 or 4 and a matching " +
+        "array length (17520 or 35040).",
+    ],
+    examples: {
+      reference: { doe_reference_name: "MediumOffice", annual_kwh: 500000 },
+      monthly: {
+        doe_reference_name: "RetailStore",
+        monthly_totals_kwh: [
+          18000, 16000, 17000, 15000, 19000, 24000, 28000, 27000, 22000, 17000,
+          16000, 18000,
+        ],
+      },
+      csv: { loads_csv: "./my_building_loads.csv" },
     },
   };
 }

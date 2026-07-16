@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  buildSubmitSummary,
+  detectResultAnomalies,
   formatFinancialSummary,
   formatResultsSummary,
   formatSystemSummary,
@@ -61,12 +61,32 @@ describe("formatSystemSummary (no systems)", () => {
   });
 });
 
-describe("buildSubmitSummary", () => {
-  it("lists sized techs and NPV", () => {
-    const s = buildSubmitSummary("uuid-1", 3, "optimal", outputs);
-    expect(s).toContain("Run UUID: uuid-1");
-    expect(s).toContain("Solar PV: 120.0 kW");
-    expect(s).toContain("Battery: 50.0 kW / 200.0 kWh");
-    expect(s).toContain("NPV: $78,000");
+describe("detectResultAnomalies", () => {
+  it("flags a $0 baseline utility bill as unparseable tariff", () => {
+    const warnings = detectResultAnomalies({
+      ElectricUtility: {
+        year_one_bill_before_tax_bau: 0,
+        year_one_bill_before_tax: 0,
+      },
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Baseline utility bill is $0");
+    expect(warnings[0]).toContain("urdb_label");
+  });
+
+  it("stays silent on a normal positive baseline bill", () => {
+    expect(detectResultAnomalies(outputs)).toHaveLength(0);
+    expect(detectResultAnomalies({})).toHaveLength(0);
+  });
+
+  it("surfaces the warning inside the results summary markdown", () => {
+    const md = formatResultsSummary({
+      ElectricUtility: {
+        year_one_bill_before_tax_bau: 0,
+        year_one_bill_before_tax: 0,
+      },
+    });
+    expect(md).toContain("## ⚠️ Warnings");
+    expect(md).toContain("Baseline utility bill is $0");
   });
 });

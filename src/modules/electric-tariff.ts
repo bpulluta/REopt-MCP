@@ -1,36 +1,76 @@
-/** ElectricTariff: shorthand expansion, validation, and the TOU schedule compiler.
+/** ElectricTariff module: shorthand expansion, validation, and the TOU compiler.
  *
- * This is the first concrete implementation of the modular section-handler pattern
- * described in src/sections.ts. All ElectricTariff-specific rate logic lives here so
- * other sections can follow the same expand/validate/warnings shape later without
- * touching the framework.
+ * The reference implementation of the ScenarioModule contract. All
+ * ElectricTariff-specific rate logic (and its constants) live here so other
+ * sections can follow the same expand/validate/warnings/example shape without
+ * touching the registry.
  */
 
-import {
-  DEFAULT_RATE_SCHEDULE_YEAR,
-  INVALID_ELECTRIC_TARIFF_ALIASES,
-  MONTHLY_RATE_LENGTH,
-  TARIFF_ENERGY_RATE_SOURCE_KEYS,
-  TARIFF_SHORTHAND_KEYS,
-  VALID_ELECTRIC_TARIFF_KEYS,
-  VALID_TOU_ARRAY_LENGTHS,
-} from "./constants.js";
-import { quotedList } from "./format.js";
-import type { SectionHandler } from "./sections.js";
+import { isDict, isNumber, type Dict } from "../guards.js";
+import { quotedList } from "../format.js";
+import type { ScenarioModule } from "./types.js";
 
-type Dict = Record<string, unknown>;
+// --- ElectricTariff constants (module-local) --------------------------------
+
+export const VALID_ELECTRIC_TARIFF_KEYS: ReadonlySet<string> = new Set([
+  "urdb_label",
+  "urdb_response",
+  "urdb_utility_name",
+  "urdb_rate_name",
+  "urdb_metadata",
+  "wholesale_rate",
+  "export_rate_beyond_net_metering_limit",
+  "monthly_energy_rates",
+  "monthly_demand_rates",
+  "blended_annual_energy_rate",
+  "blended_annual_demand_rate",
+  "add_monthly_rates_to_urdb_rate",
+  "tou_energy_rates_per_kwh",
+  "add_tou_energy_rates_to_urdb_rate",
+  "remove_tiers",
+  "demand_lookback_months",
+  "demand_lookback_percent",
+  "demand_lookback_range",
+  "coincident_peak_load_active_time_steps",
+  "coincident_peak_load_charge_per_kw",
+]);
+
+export const INVALID_ELECTRIC_TARIFF_ALIASES: Readonly<Record<string, string>> = {
+  blended_annual_rates_us_dollars_per_kwh: "blended_annual_energy_rate",
+  blended_annual_demand_charges_us_dollars_per_kw: "blended_annual_demand_rate",
+};
+
+// Convenience shorthand keys the server compiles into canonical REopt keys before
+// submission. These are NOT sent to REopt; they are expanded by `expand` below.
+export const TARIFF_SHORTHAND_KEYS: ReadonlySet<string> = new Set([
+  "tou_energy_schedule",
+]);
+
+// Any one of these keys constitutes a valid energy-price signal for a tariff.
+// REopt requires an energy rate; demand charges are optional.
+export const TARIFF_ENERGY_RATE_SOURCE_KEYS: ReadonlySet<string> = new Set([
+  "urdb_label",
+  "urdb_response",
+  "blended_annual_energy_rate",
+  "monthly_energy_rates",
+  "tou_energy_rates_per_kwh",
+  "tou_energy_schedule", // shorthand; compiles to tou_energy_rates_per_kwh
+]);
+
+// Monthly blended-rate arrays must cover all 12 calendar months.
+export const MONTHLY_RATE_LENGTH = 12;
+
+// Valid lengths for a full-year timeseries at 1, 2, or 4 time steps per hour.
+export const VALID_TOU_ARRAY_LENGTHS: ReadonlySet<number> = new Set([
+  8760, 17520, 35040,
+]);
+
+// Reference calendar year REopt uses to align rate schedules with weekdays/weekends
+// when a load profile comes from a DOE CRB reference building.
+export const DEFAULT_RATE_SCHEDULE_YEAR = 2017;
 
 const VALID_DAY_FILTERS = ["all", "weekday", "weekend"];
 const VALID_TIME_STEPS_PER_HOUR: ReadonlySet<number> = new Set([1, 2, 4]);
-
-/** True for real numbers, excluding bool. */
-function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isDict(value: unknown): value is Dict {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 /** Reference year used to align the TOU schedule with weekdays/weekends. */
 function resolveYear(scenario: Dict): number {
@@ -158,8 +198,14 @@ function range(start: number, stop: number): number[] {
   return out;
 }
 
-export class ElectricTariffHandler implements SectionHandler {
+export class ElectricTariffModule implements ScenarioModule {
   readonly key = "ElectricTariff";
+  readonly kind = "section" as const;
+  readonly label = "Electric Tariff";
+
+  example(): Dict {
+    return { blended_annual_energy_rate: 0.12, blended_annual_demand_rate: 15.0 };
+  }
 
   /** Compile the `tou_energy_schedule` shorthand into REopt's hourly array. */
   expand(section: Dict, scenario: Dict): Dict {

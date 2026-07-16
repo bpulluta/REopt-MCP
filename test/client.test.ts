@@ -4,6 +4,7 @@ import {
   pollUntilComplete,
   submitJob,
 } from "../src/client.js";
+import { HttpStatusError } from "../src/http.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -56,6 +57,36 @@ describe("submitJob", () => {
     expect(url).toContain("/job");
     expect(url).toContain("api_key=");
   });
+
+  it("retries once on a transient network error, then succeeds", async () => {
+    let calls = 0;
+    const fn = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("aborted"); // undici-style network throw
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ run_uuid: "retry-ok" }),
+        text: async () => "",
+      };
+    });
+    vi.stubGlobal("fetch", fn);
+    const uuid = await submitJob({ Site: {} });
+    expect(uuid).toBe("retry-ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a non-2xx response — REopt saw the request", async () => {
+    const fn = vi.fn(async () => ({
+      ok: false,
+      status: 422,
+      json: async () => ({}),
+      text: async () => "bad payload",
+    }));
+    vi.stubGlobal("fetch", fn);
+    await expect(submitJob({ Site: {} })).rejects.toBeInstanceOf(HttpStatusError);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("pollUntilComplete", () => {
@@ -73,5 +104,16 @@ describe("pollUntilComplete", () => {
     mockFetchJson({ status: "Optimizing" });
     const result = await pollUntilComplete("uuid-1", -1); // already over budget
     expect(result.status).toBe("timeout");
+  });
+
+  it("returns error immediately when status is error, carrying messages", async () => {
+    const messages = { errors: ["Infeasible problem detected."] };
+    mockFetchJson({ status: "error", messages });
+    const result = await pollUntilComplete("uuid-1", 300);
+    expect(result.status).toBe("error");
+    if (result.status === "error") {
+      expect(result.poll_count).toBe(1); // did not poll to timeout
+      expect(result.messages).toEqual(messages);
+    }
   });
 });

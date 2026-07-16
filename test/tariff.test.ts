@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   compileTouSchedule,
-  ElectricTariffHandler,
-} from "../src/tariff.js";
+  ElectricTariffModule,
+} from "../src/modules/electric-tariff.js";
 
-const handler = new ElectricTariffHandler();
+const handler = new ElectricTariffModule();
 
 describe("compileTouSchedule", () => {
   it("produces an 8760-hour array (non-leap year, Feb 29 skipped)", () => {
@@ -81,7 +81,7 @@ describe("compileTouSchedule", () => {
   });
 });
 
-describe("ElectricTariffHandler.expand", () => {
+describe("ElectricTariffModule.expand", () => {
   it("compiles tou_energy_schedule into tou_energy_rates_per_kwh", () => {
     const section = {
       tou_energy_schedule: { default_rate: 0.1, periods: [{ rate: 0.3 }] },
@@ -110,7 +110,7 @@ describe("ElectricTariffHandler.expand", () => {
   });
 });
 
-describe("ElectricTariffHandler.validate", () => {
+describe("ElectricTariffModule.validate", () => {
   it("accepts a blended rate", () => {
     expect(handler.validate({ blended_annual_energy_rate: 0.12 }, {})).toEqual([]);
   });
@@ -174,7 +174,7 @@ describe("ElectricTariffHandler.validate", () => {
   });
 });
 
-describe("ElectricTariffHandler.warnings", () => {
+describe("ElectricTariffModule.warnings", () => {
   it("warns when URDB coexists with custom rates without add_* flags", () => {
     const warnings = handler.warnings(
       { urdb_label: "abc", blended_annual_energy_rate: 0.1 },
