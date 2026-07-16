@@ -1,6 +1,6 @@
 # REopt MCP Server
 
-MCP server for optimizing distributed energy resources using NLR's REopt API. Works with GitHub Copilot Chat in VS Code to evaluate solar, battery storage, wind, and generator technologies through natural conversation.
+MCP server for optimizing distributed energy resources using NLR's REopt API. Works with GitHub Copilot Chat in VS Code or Claude Code to evaluate solar, battery storage, wind, and generator technologies through natural conversation.
 
 ## Setup
 
